@@ -2865,14 +2865,30 @@ names.assign(old.cbegin(), old.cend());  // ok
 
 `std::deque` 和 `std::list` 还支持 `c.push_front(t)` `c.pop_front(t)` 操作。
 
-`std::list` 特有的成员函数：
+`std::list` 和 `std::forward_list` 定义了几个成员函数形式的容器算法：
 
-- `l.sort()`：排序。`std::list` 没有随机访问迭代器，因此不支持 STL 的 `std::sort` 算法
-- `remove`：删除和指定值相等的所有元素
-- `unique`：去除序列中的**连续重复元素**
-- `merge`：合并两个链表，清空被合并的链表
-- `reverse`：颠倒链表
-- `splice`：在指定位置前面插入另一链表中的一个或多个元素，并在另一链表中删除被插入的元素
+`lst.sort()` `lst.sort(comp)`：排序。`std::list` 没有随机访问迭代器，因此不支持 STL 的 `std::sort` 算法
+
+`lst.unique()` `lst.unique(pred)`：调用 `lst.erase` 删除连续重复元素。重复与否调用 `==` 或 `pred` 判定。
+
+`lst.merge(lst2)` `lst.merge(lst2, comp)`：将来自 `lst2` 的元素合并进 `lst`。`lst` 和 `lst2` 必须是有序的，元素将从 `lst2` 删除，因此合并后 `list2` 为空。
+
+`lst.remove(val)` `lst.remove_if(pred)`：调用 `lst.erase` 删除与 `val` 相等（调用 `==`）或使 `pred` 为 `true` 的**所有**元素
+
+`lst.reverse()`：反转链表
+
+链表类型还定义了 `splice` 算法：
+
+`lst.splice(args)` 或 `flist.splice_after(args)`
+
+`(p, lst2)`：`p` 是指向 `lst` 中元素（或指向 `flst` 首前位置）的迭代器。函数将 `lst2` 所有元素移动到 `lst` 中 `p` 之前的位置（或 `flst` 中 `p` 之后的位置）。`lst2` 中的相应元素会被删除。**`lst` 和 `lst2` 是不同的链表**。
+
+`(p, lst2, p2)`：`p2` 是指向 `lst2` 中位置的迭代器。函数将 `p2` 指向的元素移动到 `lst` 中（或将它之后的元素移动到 `flst` 中）。**`lst`（`flst`）和 `lst2` 可以是相同的链表**。
+
+`(p, lst2, b, e)`：`b` `e` 是 `lst2` 中的范围。函数将这一范围确定的元素移动到 `lst` 中（或 `flst` 中）。**`lst`（`flst`）和 `lst2` 可以是相同的链表**，但 `p` 不能在范围 `b` `e` 之内。
+
+
+  
 
 
 
@@ -2886,6 +2902,9 @@ names.assign(old.cbegin(), old.cend());  // ok
 - `map`：映射。存放成对的 `key` 和 `value`，根据 `key` 对元素排序，可快速地**根据 `key` 检索元素**。
 - `multiset`：允许重复 `key` 的映射。
 
+有序关联容器上，**关键字类型必须定义元素比较的方法**（默认为 `operator<`）。
+
+
 无序关联容器：元素按照特定顺序（乱序）存放，**插入和检索只需要 $O(1)$ 的时间**。
 
 - `unordered_set`
@@ -2893,15 +2912,29 @@ names.assign(old.cbegin(), old.cend());  // ok
 - `unordered_multiset`
 - `unordered_multimap`
 
-除了各容器都有的函数以外，还支持以下成员函数：
+无序容器使用*哈希函数*和关键字类型的 `==` 运算符组织元素。无序容器性能一般更好。
 
-- `find()`：查找等于某个值的元素（`x < y` 和 `y < x` 同时为 `false` 即相等）
-- `lower_bound()` `upper_bound`：查找下界 / 上界
-- `equal_range()`：同时查找上界和下界
-- `count`：计算等于某个值的元素个数（`x < y` 和 `y < x` 同时为 `false` 即相等）
-- `insert()`：插入
 
-`std::pair` 模板：
+##### `std::pair`
+
+
+`std::pair` 类模板保存一对数据，它有以下成员：
+
+`pair<T1, T2> p`：默认构造函数，对 `T1` `T2` 类型的两个成员执行值初始化
+
+`pair<T1, T2> p(v1, v2)` `pair<T1, T2> p{v1, v2}`：构造函数，用 `v1` `v2` 初始化
+
+`make_pair(v1, v2)`：返回一个用 `v1` `v2` 初始化的 `std::pair`，后者的类型从 `v1` `v2` 推断
+
+`p.first` `p.second`：返回 `p` 的数据成员（它们是 `public` 的）
+
+`p1 relop p2`：关系运算符，按字典序定义。
+
+`p1 == p2` `p1 != p2`：判断相等性，调用 `==`
+
+
+
+`std::pair` 的实现：
 
 ```c++
 template <class _T1, class _T2>
@@ -2917,9 +2950,81 @@ struct pair {
 };
 ```
 
+
+
+##### 关联容器的常用操作
+
+关联容器定义了额外的类型别名：
+
+- `key_type`：关键字类型
+- `mapped_type`：只适用于 `map`，关键字关联的类型
+- `value_type`：对于 `set`，与 `key_type` 等价；对于 `map`，是 `pair<const key_type, mapped_type>`
+
+###### 关联容器迭代器
+
+关联容器迭代器的解引用运算符**返回一个 `value_type` 类型的值**。
+`set` 虽然既有 `iterator` 又有 `const_iterator`，但它的这两种迭代器实际上都是 `const` 的。
+
 ```c++
-pair<int, string> pr = make_pair(200, "hi");
+std::map<std::string, size_t> word_count{{"hi", 10}, {"hello", 20}};
+auto it = word_count.begin();
+
+std::cout << it->first;    // 打印关键字
+it->first = 100;    // error! 关键字是 const 的
+it->second = 42;    // ok 
+
+std::set<int> nums{0, 1, 2, 3};
+std::set<int>::iterator iter = nums.begin();
+*iter = 42;    // error! 
 ```
+
+###### 添加、删除元素
+
+添加元素：
+
+`c.insert(v)` `c.emplace(args)`：`v` 是 `value_type` 类型的对象（可以由 `args` 构造一个 `value_type` 类型的对象）
+
+`c.insert(b, e)`：`b` `e` 表示 `value_type` 类型对象的范围
+
+`c.insert(il)`：`il` 是 `value_type` 类型对象的花括号列表
+
+对于 `map` 和 `set`，只有当元素关键字不在关联容器里时插入才会被执行。插入函数返回一个 `pair`，包含一个指向**指定关键字对应的元素**的迭代器和一个指示插入是否成功的 `bool`。也就是说，若关键字已经存在，则插入函数什么也不做，并返回一个将此元素的迭代器和一个 `false` 绑定的 `pair`。
+
+对于 `multimap` 和 `multiset`，插入总会被执行。插入函数返回一个指向新元素的迭代器。
+
+删除元素：
+
+`c.erase(k)`：删除**所有关键字为 `k` 的元素**，返回**删除的元素个数**
+
+`c.erase(p)` `c.erase(b, e)`：删除迭代器 `p`（或范围 `b` `e`）指定的元素，返回 `p` 之后的元素的迭代器（或 `e`） 
+
+###### 访问元素
+
+`map` 和 `unordered_map` 提供了下标运算符和 `at` 成员函数。`set`、`multimap`、`multi_unordered_map` 不支持它们。
+
+```c++
+map<std::string, size_t> word_count;
+word_count["hi"] = 42;    // 若关键字 "hi" 不在关联容器内 则插入一个 {"hi", (值初始化)} 的键值对 再提取出新插入的元素 赋值为 42
+word_count.at("hi");    // 访问关键字为 "hi" 的元素 若未找到则抛出异常
+```
+
+在关联容器中查找元素：
+
+`c.find(k)`：返回一个迭代器，指向**第一个关键字为 `k` 的元素**，未找到则返回尾后迭代器
+
+`c.count(k)`：返回**关键字为 `k` 的元素的个数**
+
+`c.lower_bound(k)`：只适用于有序容器。返回一个迭代器，指向**第一个关键字不小于 `k` 的元素**
+
+`c.upper_bound(k)`：只适用于有序容器。返回一个迭代器，指向**第一个关键字大于 `k` 的元素**
+
+`c.equal_range(k)`：返回一个迭代器 `pair`，指示**关键字等于 `k` 的元素的范围**。若不存在，则返回两个尾后迭代器 `pair`。相当于同时返回了 `lower_bound` 和 `upper_bound`。
+
+要遍历 `multi-` 关联容器中同一关键字对应的元素，可以用 `find` 和 `cound`，也可以用 `lower_bound` 和 `upper_bound`，还可以只用 `equal_range`。
+
+
+
+
 
 `std::multiset`
 
@@ -2932,11 +3037,6 @@ class multiset {
 
 `Key` 表示容器中每个元素的类型，`Pred` 类型的变量定义了 `multiset` 中的元素之间的“小于号”（缺省类型是 `less<Key>`，即 `<`）。
 
-![](images/20230407164902.png)
-
-![](images/20230407164915.png)
-
-`set` 的 `insert` 函数：
 
 `std::multimap`
 
@@ -2948,12 +3048,6 @@ class multimap {
     // ...
 };
 ```
-
-`multimap` 中的元素由 `<关键字, 值>` 组成, 每个元素是一个 `pair` 对象，`multimap` **允许多个元素的关键字相同**。元素按照关键字**升序**排列。
-
-`std::map` 中的元素的关键字**各不相同**，可以用 `[]` 运算符通过关键字访问对应的值，它会返回对关键字值为 `key` 的元素的值的引用，若不存在则插入一个关键字为 `key` 的元素，返回其值的引用。
-
-![](images/20230407165912.png)
 
 
 #### 容器适配器
@@ -3060,42 +3154,50 @@ for (j = v.begin(); j != v.end(); ++j)
 
 #### 输入输出迭代器
 
-
+标准库定义了用于 IO 类型对象的迭代器。
 
 类模板 `std::ostream_iterator` 描述一个输出迭代器对象，通过 `<<` 运算符将连续的元素写入输出流，支持解引用 `*` `->` 和自增 `++`。
 
 类模板 `std::istream_iterator` 描述一个输入迭代器对象。通过 `>>` 运算符从输入流读入连续的元素。除了支持解引用 `*` `->` 和自增 `++` 外，还支持比较 `==` `!=`。
 
+##### `std::istream_iterator`
+
+使用示例：此代码从 `std::cin` 读取 `int`，在输入结束（EOF 或 IO 错误）后打印输入的值。
 
 ```c++
-#include <iostream>
-#include <algorithm>
 #include <iterator>    // std::ostream_iterator 定义于此
 
-using namespace std;
+std::istream_iterator<int> int_it(cin);  // 将 cin 绑定到 int_it
+std::istream_iterator<int> int_eof;  // 默认初始化 创建一个尾后迭代器
 
-int main() {
-    istream_iterator<int> inputInt(cin);
-    int n1, n2;
-    n1 = *inputInt;
-    inputInt++;
-    n2 = *inputInt;
-    cout << n1 << " " << n2 << endl;
+std::vector<int> vec;
 
-    ostream_iterator<int> outputInt(cout);
-    *outputInt = n1 + n2;
-    cout << endl;        // 输出 n1 + n2 和一个换行
-    int a[5] = {0, 1, 2, 3, 4};
-    copy(a, a + 5, outputInt);
+while (int_it != int_eof) {
+    vec.push_back(*int_it++);    // 解引用运算符返回从流中读取的值 自增运算符递增迭代器
 }
 ```
 
-`std::ostream_iterator` 还可提供第二实参，表示输出元素后的分隔字符串
+上述程序可以重写为更简洁的形式：
+
+```c++
+std::istream_iterator<int> int_it, int_eof;
+std::vector<int> vec(int_it, int_eof);
+```
+
+`std::istream_iterator` 允许**懒惰求值**。标准库实现一般不会在将 `istream_iterator` 绑定到某个流上时立即从流读取数据，而是把从流中读取数据的过程推迟到在第一次解引用迭代器之前，避免迭代器未使用就被销毁，便于多点同时读取。
+
+##### `std::ostream_iterator`
+
+可以对任何定义了 `<<` 运算符的类型定义 `std::ostream_iterator`。`std::ostream_iterator` 的构造函数可提供第二参数，它是一个在输出每个元素后打印的字符串（必须是 C 风格字符串）。`std::ostream_iterator` 不能默认初始化。
 
 ```c++
 vector v{1, 2, 3, 4, 5};
 ostream_iterator<int> outputInt(cout, "*");
-copy(a.begin(), a.end(), outputInt);
+outputInt = 10;    // 输出 10
+++outputInt;
+*outputInt;
+outputInt++;    // 这些运算符不会做任何事情 直接返回 outputInt 可以使用它们 以使其使用风格与其他迭代器一致
+copy(a.begin(), a.end(), outputInt);  // 输出 12345
 ```
 
 实现：
