@@ -3564,3 +3564,272 @@ int main() {
 `unique(b, e)`：将序列中**相邻重复项**“消除”，即使不重复项出现在序列开始，并返回指向最后一个不重复元素之后位置的迭代器。例：先 `sort(vec.begin(), vec.end())` 再 `vec.erase(unique(vec.begin(), vec.end()), vec.end())`
 
 `transform(b, e, dest, pr)`：以 `b` `e` 围成的范围内的每一个元素调用可调用对象 `pr`，将返回值存放在 `dest`。
+
+
+# C++ 多文件工程
+
+![](images/20230412101428.png)
+
+多文件的意义：拆分为多个代码文件后，当修改某个代码文件时，**只需重新编译改过的文件并重新链接**即可，整体的翻译效率得到提升。
+
+根据后缀名，C++ 代码文件大致可以分为两类：
+- `.h` 头文件：一般存放类型的定义和符号的声明（不涉及模板时）
+    - 头文件只含声明，而只有定义才可以编译出二进制指令，因此单独编译头文件不会产生二进制指令
+    - 头文件的作用仅在于被 `.cpp` 包含
+
+- `.cpp` 实现文件：存放对应头文件声明的定义
+    - 一般包含同名头文件
+    - 每个实现文件一般对应一个翻译单元，这些翻译单元最后链接为整个程序
+    - 项目一般会包含一个带有 `main()` 函数的特殊实现文件作为程序的执行入口。此实现文件一般只会包含必需的头文件
+
+
+预处理指令：以 `#` 开头且以换行符为结尾的语句是预处理指令。预处理指令在编译之前完成特定的替换任务。
+
+`#include` 预处理指令：把某个源文件直接插入到指令所在的位置。预处理时不断递归地展开 `#include` 指令。`include <头文件名>` 优先在系统库文件中查找，`include "文件名"` 优先在当前源文件所在的路径中查找。
+
+
+条件编译可以避免**多次 `#include` 头文件导致重复**。
+
+```c++
+#if __cplusplus >= 201103L
+int* ptr = nullptr;
+#else
+int* ptr = NULL;
+#endif
+
+// defined 运算符可以返回当前环境是否定义了某个宏
+#if defined ONLINE_JUDGE
+// #if defined 等价于 #ifdef
+cout << "welcome";
+#endif
+
+// #if !defined 等价于 #ifndef
+```
+
+
+命名空间一般在 `.h` 头文件中，
+```c++
+namespace libA {
+    constexpr double PI{3.14159265359};
+}
+
+int main() {
+    using namespace libA;
+    using libA::PI;
+}
+```
+
+单一定义原则（One Definition Rule, ODR）： 一系列规定 C++ 如何处理声明和定义的规则，包括：
+- 一个翻译单元中，允许出现变量、函数、类型、模板的**多次声明**，但只允许出现**至多一次定义**
+- 一个翻译单元中，如果“ODR-使用”了一个符号（即需要取其地址的使用），那么这个符号至少要出现一次**定义**
+- 整个程序中，**非内联**的符号最多只能出现一次定义
+
+多文件中涉及同一个变量名的处理：
+- 多个文件共享全局非只读变量：在一个文件中定义，其他文件中 `extern` 声明
+- 多个文件共享全局只读变量：在一个文件中用 `extern const` 定义，其他文件中用 `extern const` 声明
+- 多个文件各自使用全局只读变量：`const` 默认表示变量被各个文件分别管理
+
+
+C++ 程序通过 `main` 函数的参数获取命令行参数，其形式为 `int main(int argc, char** argv)`。
+
+- `argc`：代表启动程序时，命令行参数的个数。C++ 规定，可执行程序自身的文件名也算作一个命令行参数，因此 `argc` 至少是 `1`
+- `argv`：指针数组，每个元素都是一个 C 风格字符串（argv[0] 是程序文件名） 
+
+在命令行中，可以用 `>` `<` 重定向输入输出（Windows Powershell 不支持）。
+
+```bash
+$ test.exe > out.md
+# 将标准输出重定向到 out.md
+$ test.exe < in.md
+# 将 in.md 重定向到标准输入
+```
+
+## 命令行编译（以 g++ 为例）
+
+```bash
+$ g++ ./main.cpp ./hello.cpp
+
+# 也可以用 -o 指定编译结果存放的位置
+$ g++ ./main.cpp ./hello.cpp -o ./main.exe
+```
+
+`g++` 通过文件后缀名判断其流程的起点：
+
+|后缀名|g++ 的行为|
+|:---:|:---:|
+|`.cpp` `.c++` `.cc` `.cxx` |视为源文件，将预处理作为第一步|
+|`.ii` |视为预处理之后的源文件，将编译作为第一步|
+|`.s` `.S` |视为汇编文件，将汇编作为第一步|
+|其他（一般为 `.o` `.obj`）|视为对象文件，将链接作为第一步|
+
+`g++` 通过若干选项控制其流程的终点
+
+|选项|g++ 的行为|
+|:---:|:---:|
+| `-E` |将预处理作为最后一步，得到预处理后的源文件|
+| `-S` |将编译作为最后一步，得到汇编文件|
+| `-c` |将汇编作为最后一步，得到对象文件|
+|不含以上选项|将链接作为最后一步，得到可执行文件|
+
+`-E` 并不通过 `-o` 控制输出位置，它直接将结果输出到 `stdout` 上。可以用重定向运算符保存输出。
+
+```bash
+$ g++ ./hello.cpp -E > ./hellp.ii
+$ g++ ./hello.ii -S -o ./hellp.s
+$ g++ ./hello.s -c -o ./hellp.o
+$ g++ ./hello.o -o ./hellp.exe
+/hello.exe
+```
+
+构建（Build）：在一个项目中安排编译的顺序和时机，得到想要的结果（称为目标，Target）。
+
+GNU Make，简称 Make，是一个经典的构建工具。Make 使用一种称为 Makefile 的文件来指明构建方法，Makefile 就是文件名为 `makefile` 的文件。
+
+```shell
+# Makefile
+# 目标文件: 依赖文件0 依赖文件1 ...
+#       生成命令
+# 生成命令前是一个 Tab 字符
+
+main.exe: f.o g.o main.o
+    g++ f.o g.o main.o -o main.exe
+f.o: f.cpp
+    g++ f.cpp -c -o f.o
+g.o: g.cpp
+    g++ g.cpp -c -o g.o
+main.o: main.cpp
+    g++ main.cpp -c -c main.o
+```
+
+在命令行中执行 `make 目标文件` 完成构建。`Make` 可以通过每个文件的最后改动时间来确定一个目标是否需要重新生成，不用手动判断。
+
+
+CMake 可以通过一个名为 `CMakeLists.txt` 的脚本生成 Makefile。
+
+```shell
+# CMakeLists.txt
+
+# 规定最低 CMake 版本
+cmake_minimum_required(VERSION 3.18.0)
+# 指定项目名称
+project(HelloWorld)
+# 从 main.cpp f.cpp g.cpp 编译链接 得到一个名为 main 的可执行文件
+add_executable(main main.cpp f.cpp g.cpp)
+```
+
+运行 `cmake` 命令可以根据 `CMakeLists.txt` 生成一系列文件，其中包含 `Makefile`。再运行 `make` 命令来生成可执行文件。
+
+```shell
+# CMakeLists.txt 的常用命令
+
+# 从指定源文件编译出一个可执行文件
+add_executable(tgt srcs...)
+
+# 添加包含目录
+tarfet_include_directories(tgt PRIVATE dirs...)
+
+# 添加库查找目录
+target_link_directories(tgt PRIVATE dirs...)
+
+# 添加库链接（-l...）
+target_link_libraries(tgt PRIVATE libs...)
+
+# 设置编译选项
+target_compile_options(tgt PRIVATE opts...)
+
+# 设置其他编译属性（标准版本、输出路径等）
+set_target_properties(tgt PROPERTIES prop1 val1 prop2 val2 ...)
+```
+
+
+
+# 流与文件
+
+![](images/20230412150657.png)
+
+输入流对象 `cin` 与标准输入设备相连，对应于标准输入流。
+
+输出流对象 `cout` 与标准输出设备相连，对应于标准输出流。
+
+输出流对象 `cerr` 和 `clog` 与标准错误输出设备相连，前者不使用缓冲区，直接向显示器输出信息，后者将信息先存放在缓冲区，缓冲区满或刷新时才输出到显示器。
+
+
+`istream` 类（或其基类）重载了 `oprator>>` 和 `operator bool`（这个重载是 `explicit` 的），从而实现了判断输入流结束。
+
+`istream` 类的成员函数：
+
+```c++
+// 从输入流读取 bufSize-1 个字符到缓冲区 buf，或读到换行符为止
+istream& getline(char* buf, int bufSize);
+
+// 从输入流读取 bufSize-1 个字符到缓冲区 buf，或读到 delim 为止
+istream& getline(char* buf, int bufSize, char delim);
+
+// 把 c 放回输入流
+istream& putback(char c);
+```
+
+输入输出重定向：
+
+```c++
+// 标准输出重定向到 test.txt
+freopen("test.txt", "w", stdout);
+
+// cin 被改为从 test.txt 中读取数据
+freopen("test.txt", "r", stdin);
+```
+
+流操纵算子（定义在 `iomanip` 头文件）是一种函数。`iostream` 中对 `<<` 进行了 `ostream& operator<<(ostream& (*p)(ostream&));` 重载。
+
+`dec` `oct` `hex` `setbase` 等流操纵算子可以设置整数流的基数。
+`precision` 成员函数和 `setprecision` `setiosflags` 流操纵算子可以设置浮点数的精度。
+`setw` 成员函数和 `width` 流操纵算子可以设置域宽。
+
+## 文件操作
+
+```c++
+#include <fstream>
+ofstream outFile("out.txt", ios::out|ios::binary);
+
+// 也可以先默认构造创建对象 再用 open 成员函数打开
+ofstream outFile;
+outFile.open("out.txt", ios::out|ios::binary);
+```
+
+`ofstream` 是 `fstream` 中定义的类。`ios::out` 是打开并建立文件的选项。
+    - `ios::out` 输出到文件，删除原有内容
+    - `ios::app` 输出到文件，保留原有内容，总是在尾部添加
+    - `ios::ate` 输出到文件，保留原有内容，在任意位置添加
+    - `ios::binary` 以二进制文件格式打开
+
+文件的读写指针标识文件操作的当前位置。读写操作在读写指针指向的位置进行。
+
+```c++
+ofstream fout("a.txt", ios::ate);
+
+long location = fout.tellp();    // 取得写指针的位置
+location = 10L;
+fout.seekp(location);      // 将写指针移动到第 10 个字节处
+fout.seekp(location, ios::beg);    // 从头数 location
+fout.seekp(location, ios::cur);    // 从当前位置数 location
+fout.seekp(location, ios::end);    // 从尾部数 location
+
+// location 可以为负数
+// istream 类的对应成员函数 seekg() 用法也类似
+```
+
+示例：将 `in.txt` 中的整数排序后，输出到 `out.txt`。
+
+```c++
+int main() {
+    using namespace std;
+    vector<int> v;
+    ifstream srcFile("in.txt", ios::in);
+    ofstream destFile("out.txt", ios::out);
+    int x;
+    while (srcFile >> x)
+        v.push_back(x);
+    ranges::sort(v);
+    ranges::copy(v, ostream_iterator<int>(destFile, " "));
+}
+```
