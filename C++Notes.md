@@ -2,11 +2,12 @@
 
 # 其他
 
-C 风格字符串末尾有 `\0`，但 C++ 的 `std::string` 没有。`new` 一个与 `str` 长度相同的 C 风格字符串时需要用 `new char[strlen(str) + 1];`。 
 
 使用范围 `for` 循环修改字符串 / 向量等中的元素时，应使用引用：`for (auto a& : str)`。
 
 不能在范围 `for` 循环中向 `vector` 对象添加元素，此外，任何一种可能改变 `vector` 对象容量的操作都可能使该 `vector` 对象的迭代器失效。
+
+要想自定义类的对象可以被用于范围 `for`，必须定义此对象的 `begin()` 和 `end()` 成员函数。
 
 `i++` 使 `i` 自增，然后将 `i` 自增之前的值（即 `i` 的初始值）作为右值返回。
 `++i` 使 `i` 自增，然后将 `i` 本身作为左值返回。
@@ -188,7 +189,9 @@ int ax1 = ptrToA->*pToX1;
 
 ## `string` 操作
 
-**构造函数**：
+C 风格字符串末尾有 `\0`，但 C++ 的 `std::string` 没有。`new` 一个与 `str` 长度相同的 C 风格字符串时需要用 `new char[strlen(str) + 1];`。 
+
+### 构造函数
 - `string s(cp, n)`：`cp` 字符数组中前 `n` 个字符的拷贝
 - `string s(s2, pos2)`：`string s2` 从下标 `pos2` 开始的字符的拷贝
 - `string s(s2, pos2, len2)`：`string s2` 从下标 `pos2` 开始 `len2` 个字符的拷贝
@@ -197,7 +200,7 @@ int ax1 = ptrToA->*pToX1;
 
 `s.substr(pos, n)`：返回一个 `string`，包含 `s` 从 `pos` 开始的 `n` 个（默认值 `s.size() - pos`）字符的拷贝
 
-**插入与删除**：
+### 插入与删除
 
 `insert` 和 `erase` 除支持迭代器参数外，还支持下标参数。
 
@@ -216,7 +219,7 @@ int ax1 = ptrToA->*pToX1;
 - `b, e`：一对迭代器
 - `初始化列表` 
 
-**查找**：
+### 查找
 
 - `s.find(args)`：查找 `s` 中 `args` **第一次**出现的位置
 - `s.rfind(args)`：逆序查找，返回**最后一次**出现的位置
@@ -245,13 +248,60 @@ while ((pos = name.find_first_of(numbers, pos)) != string::npos) {
 }
 ```
 
-**数值转换**：
+### 数值转换
 
 - `to_string(val)`：一组重载。返回数值 `val` 的 `string` 表示
 - `stoi(s, p, b)`：返回 `s` 的前缀子串的数值，`b` 为转换的进制，`p` 为 `size_t` 指针，保存 `s` 中首个非数值字符的下标。`p` 默认为 `0`，`b` 默认为 `10`
 
 类似地有 `stod` `stof` `stol` `stoul` 等等。
 
+
+## 范围和视图
+
+范围：能指示一系列元素的一对迭代器。首迭代器称为“迭代器”，尾后迭代器称为“哨位”。可以用 `std::ranges::begin(c)` 和 `std::ranges::end(c)` 获得容器 `c` 的范围迭代器和哨位。
+
+```c++
+std::vector<int> a(5);
+std::iota(a.begin(), a.end(), 0);    // 填充为 {0, 1, 2, 3, 4}
+
+std::ranges::sort(a);
+std::ranges::copy_if(a, std::ostream_iterator<int>(std::cout, " "), [](int x) { return x % 2 == 1; });    // 输出 1 3 
+
+auto it = std::ranges::find(a, 42);
+```
+
+视图可以理解成一种特殊的范围。视图不修改元素、不增加元素，只是“看”。
+
+```c++
+std::vector<int> a(5);
+std::iota(a.begin(), a.end(), 0);    // 填充为 {0, 1, 2, 3, 4}
+
+std::ranges::reverse_view v_rev{a};    // 反转
+std::ranges::take_view v_take{a, 3};    // 早退（取前三个元素）
+// 转换
+std::ranges::transform_view v_trans{
+    a,
+    []int(x) { return 2 * x; }
+};
+// 筛选
+std::ranges::filter_view v_filt{
+    a, 
+    [](int x) { return x & 2 == 0; }
+};
+
+std::ranges::copy(v_rev, std::ostream_iterator<int>(std::cout, ' '));  // 输出 4 3 2 1 0
+```
+
+视图生成器：
+
+```c++
+// 输入一个 int 序列 输出此序列的前 5 个整数的算术平方根
+std::ranges::copy(std::views::istream<int>(std::cin) |
+                      std::views::filter([](int x) { return x > 0; }) |
+                      std::views::take(5) |
+                      std::views::transform([](int x) { return std::sqrt(x); }),
+                  std::ostream_iterator<double>{std::cout, " "});
+```
 
 
 # 奇奇怪怪的类型
@@ -2712,6 +2762,92 @@ int main() {
 }
 ```
 
+更通用的包展开形式是**展开模式**，所谓模式，就是**包含形参包的表达式**。例如：
+
+```c++
+template <typename.. Args>
+std::vector<double> makeSqrtVec(Args... args) {
+    return {std::sqrt(args)...}
+}
+```
+
+折叠表达式允许在参数包或非类型模板形参包（如 `template<int... Ns>`）中**连续地做二元运算**，可分为左折叠和右折叠。
+
+左折叠形如 `(... op args)`，将 `1, 2, 3, 4` 作用于其上则得到 `(((1 + 2) + 3) + 4)`
+右折叠形如 `(args op ...)`，将 `1, 2, 3, 4` 作用于其上则得到 `(1 + (2 + (3 + 4)))`
+（外围的括号必需）
+
+以上的形式要求形参包形参个数大于等于 `2`，对个数更少的形参包，可以指定初始值：`(init op ... op args)` 或 `(args op ... op init)`。
+
+```c++
+template<typename... Args> 
+auto sum(Args... args) {
+    return (... + args);
+}
+
+template <int... args>
+class Sum {
+public:
+    static const auto value{(... + args)};
+};
+
+template <typename... Args>
+auto sumOfSquare(Args... args) {
+    return (... + (args * args));
+}
+
+
+// 用带初始值的形式重写 print
+template <typename... Args>
+void print(Args... args) {
+    ((std::cout << args), ..., (std::cout << '\n'));
+}
+```
+
+### 待决名的消歧义符
+
+#### `typename` 消歧义符
+
+```c++
+template<typename T>
+void foo(const std::vector<T> &v) {
+    std::vector<T>::const_iterator* p;  
+    // std::vector<T>::const_iterator 是待决名
+    // 编译器默认认为待决名是一个静态成员变量
+    // 这条语句被认为是一个乘法表达式
+}
+```
+
+解决办法：
+
+```c++
+typename std::vector<T>::const_iterator* p;   //声明前显式加上 typename
+
+typedef typename std::vector<T>::const_iterator iter_t;
+iter_t* p2;    // 声明类型别名 注意类型别名的声明前也要加上 typename
+```
+
+#### `template` 消歧义符
+
+```c++
+template<typename T>
+struct S {
+    template<typename U>
+    void foo() {}
+};
+ 
+template<typename T>
+void bar() {
+    S<T> s;
+    s.foo<T>();          // 错误：< 被解析为小于运算符
+}
+```
+
+解决办法：
+
+```c++
+s.template foo<T>();
+```
 
 ## 标准模板库
 
@@ -3200,24 +3336,93 @@ outputInt++;    // 这些运算符不会做任何事情 直接返回 outputInt �
 copy(a.begin(), a.end(), outputInt);  // 输出 12345
 ```
 
-实现：
+对 `std::ostream_iterator` 的简易实现：
 
 ```c++
-template <class T>
-class My_ostream_iterator {
+template <typename T>
+class OstreamIterator {
+public:
+    // C++17 规定的迭代器必须定义的类型别名
+    // C++20 只需 value_type 和 difference_type
+    using value_type = T;
+    using reference = T&;
+    using pointer = T*;
+    using difference_type = std::ptrdiff_t;
+    using iterator_category = std::output_iterator_tag;
+
 private:
-    string sep;  // 分隔符
-    ostream& os;
+    // 在此处补充你的代码
+    std::ostream& os;      // 注意 ostream 对象不允许复制 必须声明为引用
 
 public:
-    My_ostream_iterator(ostream& o, string s) : sep(s), os(o) {}
-    void operator++(){};  // ++只需要有定义即可
-    My_ostream_iterator& operator*() { return *this; }
-    My_ostream_iterator& operator=(const T& val) {
-        os << val << sep;
+    OstreamIterator<T>(std::ostream& os) : os{os} {}
+
+    OstreamIterator<T>(const OstreamIterator<T>& oi) : os{oi.os} {}  // 显式定义复制构造
+
+    OstreamIterator<T>& operator=(const T& item) {
+        os << item;
         return *this;
     }
+
+    OstreamIterator<T>& operator++() { return *this; }
+
+    OstreamIterator<T>& operator*() { return *this; }
+
 };
+```
+
+##### 实现 MyCin
+
+```c++
+
+class MyCin {
+private:
+    std::istream_iterator<int> in;
+    constexpr static const std::istream_iterator<int> fail{};
+
+public:
+    MyCin() : in{std::cin} {}
+
+    MyCin& operator>>(int& n) {
+        int temp = *in++;
+
+        if (/* 触发输入失败的条件 */)
+            in = fail;
+        else
+            n = temp;
+        return *this;
+    }
+
+    explicit operator bool() {    // 定义向 bool 的显式类型转换
+        if (in == fail) return false;
+        return true;
+    }
+};
+```
+
+定义向 `bool` 的转换，是为了实现 `while(my_cin >> n)`。之所以必须定义为显式转换，是为了让 `my_cin << n` 编译报错。也可以用 `=delete` 实现，或不定义 `bool` 转换，转而定义到 `void*` 的转换和 `!` 的重载。
+
+
+
+#### `std::iterator_traits`
+
+`std::iterator_traits` 是类型特征类，提供面对老式迭代器 (LegacyIterator) 类型的统一接口。这使得可以仅通过迭代器实现算法。
+
+`std::iterator_traits` 提供五个类型：`difference_type` `value_type` `pointer` `reference` `iterator_category`。
+
+可以用 `std::iterator_traits<It>::value_type` 获取迭代器指向的元素的类型。
+
+在类模板中，如果声明变量时的类型名包含模板形参，则会引发歧义（类型名？还是成员变量？）并导致编译错误（编译器会默认按照成员变量处理）。可以用 `typename` 消歧义符规避。
+
+```c++
+
+template <typename It>
+typename std::iterator_traits<It>::value_type accumulate(It b, It e) {
+    typename std::iterator_traits<It>::value_type init{};
+    while (b != e) 
+        init = init + *b++;
+    return init;
+}
 ```
 
 
