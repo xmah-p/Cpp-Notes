@@ -21,7 +21,7 @@
 
     string s;
     string tmp[3];
-    getline(cin, s);
+    getline(cin, s);  // s = "Miku,18,22000"
 
     int prepos = -1;
     int pos = 0;
@@ -303,6 +303,43 @@ std::ranges::copy(std::views::istream<int>(std::cin) |
                   std::ostream_iterator<double>{std::cout, " "});
 ```
 
+一个手动实现的 `sumIf`，接受一个 `int` 范围，返回其中满足 `pred` 条件的 `int` 的和：
+
+```c++
+template <typename R, typename F>
+int sumIf(
+    const R& range, const F& pred = [](auto) { return true; }) {
+    int res = 0;
+    for (auto i = std::begin(range); i != std::end(range); ++i) {
+        if (pred(*i)) res = res + *i;
+    }
+    return res;
+}
+// 注意 range 的类型必须为引用，否则无法支持数组
+// 可改用范围 for
+```
+
+一个手动实现的支持管道操作的过滤器，其过滤结果是一个 `std::vector`：
+
+```c++
+template <typename T>
+class filter {
+private:
+    std::function<bool(T)> pred;
+public:
+    filter<T>(std::function<bool(T)> pred) : pred{pred} {}
+    template <typename R>
+    friend std::vector<T> operator|(const R& range, const filter<T>& filt) {
+        std::vector<T> res;
+        for (auto& e : range) {
+            if (filt.pred(e)) res.push_back(e);
+        }
+        return res;
+    }
+};
+// 如何类外定义 operator| ?
+```
+#### review here
 
 # 奇奇怪怪的类型
 
@@ -327,8 +364,8 @@ const int *p;        // 底层 const 指向只读变量
 int const *p;        // 和上面等价
 const int const *p;  // 错误！
 
-int* const p;        // 顶层 const 指向非只读变量 自身只读
-const int* const p;  // 底层 + 顶层 const
+int *const p;        // 顶层 const 指向非只读变量 自身只读
+const int *const p;  // 底层 + 顶层 const
 ```
 
 ## 函数指针
@@ -339,8 +376,8 @@ int func(int x, char c);
 // 声明
 int (*ptr)(int x, char c) = nullptr;   // func 的类型的函数指针 把函数名换成 (*ptr)
 decltype(&func) p{nullptr};
-auto p(func){nullptr};
-auto p(&func){nullptr};                // 这四句等价
+auto p{func};
+auto p{&func};                         // 这四句等价
 
 // 赋值
 ptr = &func;
@@ -1129,7 +1166,7 @@ Constructor 1 Called
 
 可以用 `S() = default;` 要求编译器生成预置默认构造函数。
 
-**当定义了构造函数 `Test(int n)` 时，同时也定义了从 `int` 到类 `Test` 的转换**（见“转换构造函数”）。此时可以这样初始化：`Test t{Test(2)};`。注意，这一句理论上会调用复制构造函数，但由于编译器优化，实际上会调用转换构造函数。
+**当定义了构造函数 `Test(int n)` 时，同时也定义了从 `int` 到类 `Test` 的转换**（见“转换构造函数”）。此时语句 `Test t{Test(2)};` 由于编译器优化，不会调用复制构造函数。
 
 构造函数重载之间不能冲突：
 
@@ -1563,8 +1600,9 @@ class A {
 int A::a{0};       // 类外定义 不带 static
 ```
 
-静态成员函数**不能访问非静态的成员变量，也不能调用非静态的成员函数（但可以被非静态的成员函数调用），没有 `this` 指针**。另外，在**类外定义**静态成员函数时**不能加上 `static`**。
+静态成员函数**不能访问非静态的成员变量，也不能调用非静态的成员函数（构造函数除外），没有 `this` 指针**。另外，在**类外定义**静态成员函数时**不能加上 `static`**。
 
+静态成员函数也是类的一部分，它**可以访问类的私有构造函数**
 
 ## 只读成员 
 
@@ -1639,7 +1677,7 @@ class A {
 
 **友元类之间的关系不能传递，不能继承**。
 
-**友元函数的定义既可以在类外，也可以在类内**。类内定义的友元函数称为**隐藏友元函数**。隐藏友元函数**在全局命名空间内不可见**，也**不能以 `类名::友元函数名` 或 `类的对象.友元函数` 的形式被调用**。它只能在**实参为该类的对象时以 `友元函数(实参)` 的形式被调用：
+**友元函数的定义既可以在类外，也可以在类内**。类内定义的友元函数称为**隐藏友元函数**。隐藏友元函数**在全局命名空间内不可见**，也**不能以 `类名::友元函数名` 或 `类的对象.友元函数` 的形式被调用**。它只能在**实参为该类的对象时**以 `友元函数(实参)` 的形式被调用：
 
 ```c++
 class S {
@@ -3417,7 +3455,7 @@ public:
 ```c++
 
 template <typename It>
-typename std::iterator_traits<It>::value_type accumulate(It b, It e) {
+auto accumulate(It b, It e) -> typename std::iterator_traits<It>::value_type  {
     typename std::iterator_traits<It>::value_type init{};
     while (b != e) 
         init = init + *b++;
