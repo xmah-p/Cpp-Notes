@@ -1,9 +1,6 @@
 [TOC]
 
-# 其他
-
-
-使用范围 `for` 循环修改字符串 / 向量等中的元素时，应使用引用：`for (auto a& : str)`。
+# 乱七八糟
 
 不能在范围 `for` 循环中向 `vector` 对象添加元素，此外，任何一种可能改变 `vector` 对象容量的操作都可能使该 `vector` 对象的迭代器失效。
 
@@ -13,29 +10,121 @@
 `++i` 使 `i` 自增，然后将 `i` 本身作为左值返回。
 提倡使用 `++i`。
 
-处理输入的技巧：当输入为一行，包含以 `,` 分隔的字符串 `name`、整数 `age` 和 `num` 时：
+类中如果**有引用类型的数据成员**，那么类的**默认复制赋值重载会被删除**。
+
+## C++ 新特性
+
+### `if` 和 `switch` 内初始化
 
 ```c++
-    string name;
-    int age, num;
+int i = 0;
+if (i >= 0) {
+    // do something
+}
 
-    string s;
-    string tmp[3];
-    getline(cin, s);  // s = "Miku,18,22000"
+// 在 C++17 后：
 
-    int prepos = -1;
-    int pos = 0;
-    for (int i = 0; i <= 2; ++i) {
-        if (s.find(',', prepos + 1) != string::npos) 
-            pos = s.find(',', prepos + 1);
-        tmp[i] = s.substr(prepos + 1, pos - prepos - 1);
-        prepos = pos;      
-    }
-
-    name = tmp[0];
-    age = stoi(tmp[1]);
-    num = stoi(tmp[2]);
+if (int i = 0; i >= 0) {
+    // do something
+}
 ```
+
+### `auto` 可以用在函数参数类型里了
+
+```c++
+template <typename T>
+void print(T x) {
+    std::cout << x << endl;
+}
+
+// 在 c++17 后：
+
+void print(auto x) {
+    std::cout << x << endl;
+}
+
+// 以及变参包的折叠表达式：
+
+void print(auto... args) {
+    ((std::cout << args << " "), ..., (std::cout << std::endl));
+}
+```
+
+### 结构化绑定
+
+```c++
+// 自 C++17 起
+std::map<std::string, int> mp{{"miku", 2}};
+    for (auto& [str, num] : mp) {
+        print(str, num);
+    }
+```
+
+### 范围和视图
+
+范围：能指示一系列元素的一对迭代器。首迭代器称为“迭代器”，尾后迭代器称为“哨位”。可以用 `std::ranges::begin(c)` 和 `std::ranges::end(c)` 获得容器 `c` 的范围迭代器和哨位。
+
+```c++
+std::vector<int> a(5);
+std::iota(a.begin(), a.end(), 0);    // 填充为 {0, 1, 2, 3, 4}
+
+std::ranges::sort(a);
+std::ranges::copy_if(a, std::ostream_iterator<int>(std::cout, " "), [](int x) { return x % 2 == 1; });    // 输出 1 3 
+
+auto it = std::ranges::find(a, 42);
+```
+
+视图可以理解成一种特殊的范围。视图不修改元素、不增加元素，只是“看”。
+
+```c++
+std::vector<int> a(5);
+std::iota(a.begin(), a.end(), 0);    // 填充为 {0, 1, 2, 3, 4}
+
+std::ranges::reverse_view v_rev{a};    // 反转
+std::ranges::take_view v_take{a, 3};    // 早退（取前三个元素）
+// 转换
+std::ranges::transform_view v_trans{
+    a,
+    []int(x) { return 2 * x; }
+};
+// 筛选
+std::ranges::filter_view v_filt{
+    a, 
+    [](int x) { return x & 2 == 0; }
+};
+
+std::ranges::copy(v_rev, std::ostream_iterator<int>(std::cout, ' '));  // 输出 4 3 2 1 0
+```
+
+视图生成器：
+
+```c++
+// 输入一个 int 序列 输出此序列的前 5 个整数的算术平方根
+std::ranges::copy(std::views::istream<int>(std::cin) |
+                      std::views::filter([](int x) { return x > 0; }) |
+                      std::views::take(5) |
+                      std::views::transform([](int x) { return std::sqrt(x); }),
+                  std::ostream_iterator<double>{std::cout, " "});
+```
+
+## 传参时数组向指针的退化
+
+函数参数类型设置为引用，可以**防止数组退化成指针**。
+
+```c++
+template <typename R, typename F> 
+int sumIf(const R& range, const F& pred) {    // 若 R 的类型不是引用 则传入数组时发生退化
+    int sum = 0;
+    for (auto e : range) {
+        sum += pred(e) ? e : 0;
+    }
+    return sum;
+}
+```
+
+以上例子中的 `const R& range` 在模板实例化时就会变成 `const int(&range) [N]`。
+
+无法将函数参数类型显式设置为数组类型，形如 `void func(int[5] arr)` 的函数签名是非法的。
 
 ## 位运算
 
@@ -256,52 +345,7 @@ while ((pos = name.find_first_of(numbers, pos)) != string::npos) {
 类似地有 `stod` `stof` `stol` `stoul` 等等。
 
 
-## 范围和视图
 
-范围：能指示一系列元素的一对迭代器。首迭代器称为“迭代器”，尾后迭代器称为“哨位”。可以用 `std::ranges::begin(c)` 和 `std::ranges::end(c)` 获得容器 `c` 的范围迭代器和哨位。
-
-```c++
-std::vector<int> a(5);
-std::iota(a.begin(), a.end(), 0);    // 填充为 {0, 1, 2, 3, 4}
-
-std::ranges::sort(a);
-std::ranges::copy_if(a, std::ostream_iterator<int>(std::cout, " "), [](int x) { return x % 2 == 1; });    // 输出 1 3 
-
-auto it = std::ranges::find(a, 42);
-```
-
-视图可以理解成一种特殊的范围。视图不修改元素、不增加元素，只是“看”。
-
-```c++
-std::vector<int> a(5);
-std::iota(a.begin(), a.end(), 0);    // 填充为 {0, 1, 2, 3, 4}
-
-std::ranges::reverse_view v_rev{a};    // 反转
-std::ranges::take_view v_take{a, 3};    // 早退（取前三个元素）
-// 转换
-std::ranges::transform_view v_trans{
-    a,
-    []int(x) { return 2 * x; }
-};
-// 筛选
-std::ranges::filter_view v_filt{
-    a, 
-    [](int x) { return x & 2 == 0; }
-};
-
-std::ranges::copy(v_rev, std::ostream_iterator<int>(std::cout, ' '));  // 输出 4 3 2 1 0
-```
-
-视图生成器：
-
-```c++
-// 输入一个 int 序列 输出此序列的前 5 个整数的算术平方根
-std::ranges::copy(std::views::istream<int>(std::cin) |
-                      std::views::filter([](int x) { return x > 0; }) |
-                      std::views::take(5) |
-                      std::views::transform([](int x) { return std::sqrt(x); }),
-                  std::ostream_iterator<double>{std::cout, " "});
-```
 
 一个手动实现的 `sumIf`，接受一个 `int` 范围，返回其中满足 `pred` 条件的 `int` 的和：
 
@@ -342,6 +386,86 @@ public:
 #### review here
 
 # 奇奇怪怪的类型
+
+## 引用折叠
+
+通常情况下，形参类型为**右值引用**的函数不能接受左值类型的实参。但模板是一个例外：
+
+```c++
+template <typename T>
+void func(T&& x);    // func 可以接受任何类型的实参！
+```
+
+此时，若定义 `int a = 42` 并将其作为 `func` 的实参，那么编译器就会将 `T` 推断为 **`int&`** 类型。于是 `T&&` 仿佛就成为一个“左值引用的右值引用”。
+
+此时，可以通过 `T` 确定实参的值类别：如果 `T` 是左值引用类型，那么实参是左值，如果 `T` 是普通（非引用）类型，那么实参是右值。
+
+我们不能直接定义引用的引用，类型别名和这种情况是特例。这种情况下得到的“引用的引用”服从“引用折叠”的原则，即：
+
+```c++
+using IntLRef = int&;
+using IntRRef = int&&;
+// IntLRef& IntLRef&& IntRRef& 由于引用折叠 都等价于 int&
+// IntRRef&& 等价于 int&&
+```
+
+可以验证这一点：
+
+```c++
+#include <type_traits>
+#include <iostream>
+
+int main() {
+    std::cout << std::boolalpha;
+    std::cout << std::is_same<std::remove_reference<IntLRef&>::type, int>::value << endl;
+    // 输出为 true
+}
+```
+
+## 转发
+
+定义一个 `void flip(f, t1, t2)`，它将参数 `t1` `t2` 交换顺序后转发给可调用对象 `f`。
+
+一种错误的实现：
+
+```c++
+template <typename F, typename T1, typename T2>
+void flip_buggy(F f, T1 t1, T2 t2) {
+    f(t2, t1);
+}
+// 若 f 的类型为 void(int, int&)
+// 那么 flip_buggy(f, val, 42) 便违反了规约
+```
+
+利用引用折叠：
+
+```c++
+template <typename F, typename T1, typename T2>
+void flip_improved(F f, T1&& t1, T2&& t2) {
+    f(t2, t1);
+}
+// flip_improved(f, val, 42) 表现正确了（val 作为左值 使 T1 被推断为 int&，从而 T1&& 折叠成 int&）
+
+// 然而如果 f 的类型为 void(int&&, int&) 那么 flip_improved(f, val, 42) 依然不对！
+// 因为 t2 作为一个右值引用 它自身是一个左值！不能当作右值传递给 f！
+```
+
+利用 `std::forward` 实现完美转发：
+
+`std::forward` 定义在头文件 `utility` 中，必须通过显式模板实参调用，返回其实参类型的右值引用类型。
+
+即：`std::forward<T>` 的返回值类型是 `T&&`。
+
+——这只是简单的理解，实际上也并不正确。总之它利用某种魔法将这件事做成了：
+
+```c++
+template <typename F, typename T1, typename T2>
+void flip(F f, T1&& t1, T2&& t2) {
+    f(std::forward<T2> t2, std::forward<T1> t1);
+}
+```
+
+以 `t1` 为例：如果 `t1` 是左值，那么 `T1` 被推断为**左值引用类型**，`std::forward<T1>` 会返回一个“指向此左值引用的右值引用”，即返回一个左值引用类型。如果 `t1` 是右值，那么 `T1` 被推断为**普通（非引用）类型**，`std::forward<T1>` 会返回一个指向 `T1` 的右值引用，即返回一个右值引用类型。
 
 ## 指向数组的指针和引用
 
@@ -3374,6 +3498,8 @@ outputInt++;    // 这些运算符不会做任何事情 直接返回 outputInt �
 copy(a.begin(), a.end(), outputInt);  // 输出 12345
 ```
 
+##### review here!
+
 对 `std::ostream_iterator` 的简易实现：
 
 ```c++
@@ -3387,27 +3513,31 @@ public:
     using pointer = T*;
     using difference_type = std::ptrdiff_t;
     using iterator_category = std::output_iterator_tag;
+    OstreamIterator(const OstreamIterator&) = default;
+    OstreamIterator& operator=(const OstreamIterator&) = default;
 
 private:
-    // 在此处补充你的代码
-    std::ostream& os;      // 注意 ostream 对象不允许复制 必须声明为引用
-
+   std::ostream* os;    // 如果设置为引用类型 那么预置复制赋值重载会被删除
+   
 public:
-    OstreamIterator<T>(std::ostream& os) : os{os} {}
-
-    OstreamIterator<T>(const OstreamIterator<T>& oi) : os{oi.os} {}  // 显式定义复制构造
-
-    OstreamIterator<T>& operator=(const T& item) {
-        os << item;
+    OstreamIterator(std::ostream& os) : os{&os} {}
+    OstreamIterator& operator=(const T& val) {
+        *os << val;
         return *this;
     }
-
-    OstreamIterator<T>& operator++() { return *this; }
-
-    OstreamIterator<T>& operator*() { return *this; }
-
+    OstreamIterator& operator*() {
+        return *this;
+    }
+    OstreamIterator& operator++() {
+        return *this;
+    }
+    OstreamIterator& operator++(int) {
+        return *this;
+    }
 };
 ```
+
+`std::ostream` 删除了复制构造函数，因此迭代器的数据成员只能为其指针或引用。
 
 ##### 实现 MyCin
 
